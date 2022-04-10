@@ -1,12 +1,7 @@
 package com.sparidtech.walkpath
 
-import android.Manifest
-import android.R.string
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import android.graphics.*
 import android.hardware.*
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -16,29 +11,31 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import java.lang.Error
+import com.opencsv.CSVWriter
+import java.io.*
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 
 class MainActivity : AppCompatActivity(),SensorEventListener {
 
-    private var sensorManager :SensorManager?=null
-    private var stepSensor:Sensor?=null
-    private var angleSensor:Sensor?=null
+    private var sensorManager: SensorManager? = null
+    private var stepSensor: Sensor? = null
+    private var angleSensor: Sensor? = null
 
 
     private var running = false
-    private var total_steps = 0F
-    private var prev_steps = 0F
     private var current_angle = 0F
-    private var coords = mutableListOf(arrayOf(0F, 0F), arrayOf(20F, 50F), arrayOf(40F, 120F), arrayOf(60F, 140F), arrayOf(80F, 200F), arrayOf(100F, 160F))
-    private var mCanvas:Canvas?=null
+    private var coords = mutableListOf(
+        arrayOf(0F, 0F),
+    )
+    private var mCanvas: Canvas? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-
 
         val mImageView = findViewById<ImageView>(R.id.image_view_1)
         val mButton = findViewById<Button>(R.id.button_1)
@@ -59,6 +56,7 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
         windowManager.defaultDisplay.getMetrics(displayMetrics)
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
+        coords.add(arrayOf(screenWidth/2F,screenHeight/2F))
 
         val mBitmap = Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888)
         mCanvas = Canvas(mBitmap)
@@ -66,84 +64,99 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
         mImageView.setImageBitmap(mBitmap)
 
         mButton.setOnClickListener {
-            val mPaint = Paint()
-            mPaint.color = Color.RED
-            mPaint.style = Paint.Style.STROKE
-            mPaint.strokeWidth = 5F
-            mPaint.isAntiAlias = true
+            val clearPaint = Paint()
+            clearPaint.color = Color.GRAY
+            mCanvas!!.drawRect(0F, 0F, screenWidth*1F, screenHeight*1F, clearPaint)
 
-            for (iter in 0 until coords.lastIndex) {
-                val mStartX = coords[iter][0]
-                val mStartY = coords[iter][1]
-                val mStopX = coords[iter+1][0]
-                val mStopY = coords[iter+1][1]
-                mCanvas!!.drawLine(mStartX, mStartY, mStopX, mStopY, mPaint)
-            }
+            coords.clear()
+            coords.add(arrayOf(screenWidth/2F,screenHeight/2F))
+            enableSensors()
 
-            mImageView.setImageBitmap(mBitmap)
+//            val mPaint = Paint()
+//            mPaint.color = Color.RED
+//            mPaint.style = Paint.Style.STROKE
+//            mPaint.strokeWidth = 5F
+//            mPaint.isAntiAlias = true
+//
+//            for (iter in 0 until coords.lastIndex) {
+//                val mStartX = coords[iter][0]
+//                val mStartY = coords[iter][1]
+//                val mStopX = coords[iter + 1][0]
+//                val mStopY = coords[iter + 1][1]
+//                mCanvas!!.drawLine(mStartX, mStartY, mStopX, mStopY, mPaint)
+//            }
+//
+//            mImageView.setImageBitmap(mBitmap)
+        }
+    }
+
+    fun enableSensors(){
+        running = true
+        stepSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+        angleSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ORIENTATION)
+        if (stepSensor == null) {
+            Toast.makeText(this, "No sensor detected on this device", Toast.LENGTH_SHORT).show()
+            Log.i("Sensor", "Not Supported")
+        } else {
+            sensorManager?.registerListener(
+                this,
+                stepSensor,
+                SensorManager.SENSOR_DELAY_FASTEST
+            )
+            sensorManager?.registerListener(this, angleSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
     }
 
     override fun onResume() {
-        //Log.i("Sensor","is on sensor changed function")
-//        Toast.makeText(this,"No sensor detected on this device",Toast.LENGTH_SHORT).show()
         super.onResume()
         running = true
-        stepSensor=sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-        angleSensor=sensorManager?.getDefaultSensor(Sensor.TYPE_ORIENTATION)
-        if(stepSensor==null){
-            Toast.makeText(this,"No sensor detected on this device",Toast.LENGTH_SHORT).show()
-            Log.i("Sensor","Not Supported")
-        }else{
-            sensorManager?.registerListener(this,stepSensor,SensorManager.SENSOR_STATUS_ACCURACY_HIGH)
-            sensorManager?.registerListener(this,angleSensor,SensorManager.SENSOR_DELAY_NORMAL)
-        }
+        enableSensors()
+    }
 
+    override fun onPause() {
+        super.onPause()
+        writeDatatoCSV()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
+        if (running) {
+            if (event!!.sensor == stepSensor) {
+                val index = coords.lastIndex
+//
+                val xx = coords[index][0] + (25 * cos(current_angle))
+                val yy = coords[index][1] + (25 * sin(current_angle))
 
-            if(running){
-                if(event!!.sensor==stepSensor){
-                    if(prev_steps==0F){
-                        prev_steps=event!!.values[0]
-                    }else{
-                        total_steps=event!!.values[0]-prev_steps
+                val mPaint = Paint()
+                mPaint.color = Color.RED
+                mPaint.style = Paint.Style.STROKE
+                mPaint.strokeWidth = 5F
+                mPaint.isAntiAlias = true
 
-                        val index = coords.lastIndex
-                        Log.i("Sensor","Rotation Vector X"+Math.cos(current_angle.toDouble()).toString())
-                        Log.i("Sensor","Rotation Vector Y"+Math.sin(current_angle.toDouble()).toString())
-                        val xx = coords[index][0]+(6.5 * total_steps * Math.cos(current_angle.toDouble())).toFloat()
-                        val yy = coords[index][1]+(6.5 * total_steps * Math.sin(current_angle.toDouble())).toFloat()
+                Log.i("Sensor", "X" + xx.toString() + " Y "+ yy.toString())
 
-                        val mPaint = Paint()
-                        mPaint.color = Color.RED
-                        mPaint.style = Paint.Style.STROKE
-                        mPaint.strokeWidth = 5F
-                        mPaint.isAntiAlias = true
-
-                        Log.i("Sensor","Rotation Vector X"+xx.toString())
-                        Log.i("Sensor","Rotation Vector Y"+yy.toString())
-
-                        mCanvas!!.drawLine(coords[index][0], coords[index][1], xx, yy, mPaint)
-                        coords.add(arrayOf(xx, yy))
-
-//                        Log.i("Sensor","Rotation Vector X"+xx.toString())
-//                        Log.i("Sensor","Rotation Vector Y"+yy.toString())
-
-                        prev_steps=total_steps
-                    }
-//                    Log.i("Sensor","Pedometer "+total_steps.toString())
-                }else if (event.sensor==angleSensor){
-//                    current_angle = event!!.values[0] * Math.PI.toFloat() / 180
-
-                    current_angle = event!!.values[0]
-//                   Log.i("Sensor","RV "+current_angle.toString())
-                }
+                mCanvas!!.drawLine(coords[index][0], coords[index][1], xx, yy, mPaint)
+                coords.add(arrayOf(xx, yy))
+            }else{
+                current_angle = (event!!.values[0] * PI / 180).toFloat()
             }
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
     }
 
+    fun writeDatatoCSV(){
+        var writer: CSVWriter? = null
+        try {
+            writer = CSVWriter(FileWriter("/sdcard/Path.csv"))
+            for (iter in 0 until coords.lastIndex) {
+              val tempArr = arrayOf(""+coords[iter][0]+"",""+coords[iter][1]+"")
+              writer.writeNext(tempArr)
+            }
+//            writer!!.writeNext(entries)
+            writer!!.close()
+        } catch (e: IOException) {
+            //error
+        }
+    }
 }
