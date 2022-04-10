@@ -11,7 +11,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.opencsv.CSVWriter
 import java.io.*
 import kotlin.math.PI
 import kotlin.math.cos
@@ -31,6 +30,7 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
         arrayOf(0F, 0F),
     )
     private var mCanvas: Canvas? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -67,11 +67,9 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
             val clearPaint = Paint()
             clearPaint.color = Color.GRAY
             mCanvas!!.drawRect(0F, 0F, screenWidth*1F, screenHeight*1F, clearPaint)
-
             coords.clear()
             coords.add(arrayOf(screenWidth/2F,screenHeight/2F))
             enableSensors()
-
 //            val mPaint = Paint()
 //            mPaint.color = Color.RED
 //            mPaint.style = Paint.Style.STROKE
@@ -85,7 +83,6 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
 //                val mStopY = coords[iter + 1][1]
 //                mCanvas!!.drawLine(mStartX, mStartY, mStopX, mStopY, mPaint)
 //            }
-//
 //            mImageView.setImageBitmap(mBitmap)
         }
     }
@@ -113,16 +110,17 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
         enableSensors()
     }
 
+
     override fun onPause() {
         super.onPause()
         writeDatatoCSV()
+        Log.i("CSV","File written succsddfully !")
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (running) {
             if (event!!.sensor == stepSensor) {
                 val index = coords.lastIndex
-//
                 val xx = coords[index][0] + (25 * cos(current_angle))
                 val yy = coords[index][1] + (25 * sin(current_angle))
 
@@ -133,7 +131,6 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
                 mPaint.isAntiAlias = true
 
                 Log.i("Sensor", "X" + xx.toString() + " Y "+ yy.toString())
-
                 mCanvas!!.drawLine(coords[index][0], coords[index][1], xx, yy, mPaint)
                 coords.add(arrayOf(xx, yy))
             }else{
@@ -145,18 +142,32 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
     }
 
-    fun writeDatatoCSV(){
-        var writer: CSVWriter? = null
+    fun writeDatatoCSV() {
+        val filename = "Path.csv";
+        val filepath = "Walk-Path";
+
+        val myExternalFile = File(getExternalFilesDir(filepath), filename)
+        // Create an object of FileOutputStream for writing data to myFile.txt
+        var fos: FileOutputStream? = null
         try {
-            writer = CSVWriter(FileWriter("/sdcard/Path.csv"))
+            // Instantiate the FileOutputStream object and pass myExternalFile in constructor
+            fos = FileOutputStream(myExternalFile)
+            // Write to the file
             for (iter in 0 until coords.lastIndex) {
-              val tempArr = arrayOf(""+coords[iter][0]+"",""+coords[iter][1]+"")
-              writer.writeNext(tempArr)
+              val tempString:String =  ""+coords[iter][0]+","+coords[iter][0]+"\n"
+                fos.write(tempString.toByteArray())
             }
-//            writer!!.writeNext(entries)
-            writer!!.close()
+
+            // Close the stream
+            fos.close()
+            Log.i("CSV","Success")
+        } catch (e: FileNotFoundException) {
+            e.printStackTrace()
+            Log.i("CSV","Not Success")
         } catch (e: IOException) {
-            //error
+            e.printStackTrace()
+            Log.i("CSV","Fail")
         }
+        Toast.makeText(this@MainActivity, "Information saved to SD card.", Toast.LENGTH_SHORT).show()
     }
 }
