@@ -1,15 +1,23 @@
 package com.sparidtech.walkpath
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.*
 import android.hardware.*
+import android.net.wifi.aware.*
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.animation.AnimationUtils
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import java.io.*
 import kotlin.math.PI
@@ -23,6 +31,7 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
     private var stepSensor: Sensor? = null
     private var angleSensor: Sensor? = null
 
+    val serviceName="walk-path"
 
     private var running = false
     private var current_angle = 0F
@@ -31,6 +40,10 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
     )
     private var mCanvas: Canvas? = null
 
+    @RequiresApi(Build.VERSION_CODES.O)
+    private var handler = Handler()
+
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -62,6 +75,89 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
         mCanvas = Canvas(mBitmap)
         mCanvas!!.drawColor(Color.GRAY)
         mImageView.setImageBitmap(mBitmap)
+//        var isSubscribed = false
+
+//        var wifiAwareSession:WifiAwareSession
+        val attachCallback = object:AttachCallback(){
+            override fun onAttachFailed() {
+                super.onAttachFailed()
+                Toast.makeText(this@MainActivity,"Failed to Attach",Toast.LENGTH_SHORT).show()
+            }
+
+            override fun onAttached(session: WifiAwareSession?) {
+                super.onAttached(session)
+                Toast.makeText(this@MainActivity,"Succesfull to Attach",Toast.LENGTH_SHORT).show()
+//                if (session != null) {
+//                    wifiAwareSession=session
+//                }
+
+                //first discover a session
+                val configSub: SubscribeConfig = SubscribeConfig.Builder()
+                    .setServiceName(serviceName)
+                    .build()
+                session!!.subscribe(configSub, object : DiscoverySessionCallback() {
+                    var sessionDiscovered: SubscribeDiscoverySession? =null
+                    override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
+                        sessionDiscovered=session
+                        Toast.makeText(this@MainActivity,"On Subscribed",Toast.LENGTH_SHORT).show()
+                    }
+
+                    override fun onServiceDiscovered(
+                        peerHandle: PeerHandle,
+                        serviceSpecificInfo: ByteArray,
+                        matchFilter: List<ByteArray>
+                    ) {
+                        Toast.makeText(this@MainActivity,"Sending message",Toast.LENGTH_SHORT).show()
+
+                        if(sessionDiscovered!=null){
+                            var message = coords.toString().toByteArray()
+                            sessionDiscovered!!.sendMessage(peerHandle,0,message)
+                        }
+                    }
+                }, null)
+
+                //publishing a session too
+                val config: PublishConfig = PublishConfig.Builder()
+                    .setServiceName(serviceName)
+                    .build()
+               session!!.publish(config,object : DiscoverySessionCallback() {
+                   override fun onPublishStarted(session: PublishDiscoverySession) {
+                       Toast.makeText(this@MainActivity,"On Published",Toast.LENGTH_SHORT).show()
+
+
+                   }
+                   override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
+                       Toast.makeText(this@MainActivity,message.toString(),Toast.LENGTH_SHORT).show()
+
+                   }
+               },handler)
+            }
+        }
+
+        if(this.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE) ){
+            Toast.makeText(this,"packet manager is avaialber",Toast.LENGTH_SHORT).show()
+
+
+            val wifiAwareManager = this.getSystemService(Context.WIFI_AWARE_SERVICE) as WifiAwareManager
+            val filter = IntentFilter(WifiAwareManager.ACTION_WIFI_AWARE_STATE_CHANGED)
+            val myReceiver = object : BroadcastReceiver() {
+
+                override fun onReceive(context: Context, intent: Intent) {
+                    Toast.makeText(context,"in Reciever",Toast.LENGTH_SHORT).show()
+
+                    // discard current sessions
+                    if (wifiAwareManager?.isAvailable == true) {
+                       Toast.makeText(context,"is Availabel mangaer",Toast.LENGTH_SHORT).show()
+
+                        wifiAwareManager.attach(attachCallback,handler)
+                    } else {
+                        Toast.makeText(context,"Isnt Availabel mangaer",Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            this.registerReceiver(myReceiver, filter)
+        }
+
 
         mButton.setOnClickListener {
             val clearPaint = Paint()
