@@ -115,7 +115,6 @@ class MainActivity : AppCompatActivity(),SensorEventListener {
                         }
                     }
                 }, null)
-
                 //publishing a session too
                 val config: PublishConfig = PublishConfig.Builder()
                     .setServiceName(serviceName)
